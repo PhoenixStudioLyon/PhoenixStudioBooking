@@ -1,0 +1,14 @@
+{
+  "name": "phoenix-booking",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Phoenix Studio booking app: calendar + customers (zero-dependency Node server, React client)",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --no-warnings server/index.js",
+    "dev:server": "node --no-warnings --watch server/index.js",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build"
+  }
+}
