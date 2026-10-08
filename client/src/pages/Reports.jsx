@@ -6,6 +6,7 @@ import { api } from '../api.js';
 import BookingDetails from '../calendar/BookingDetails.jsx';
 import BookingForm from '../calendar/BookingForm.jsx';
 import { addDays, todayYMD, DAY_LONG, MONTH_LONG } from '../dates.js';
+import { csvCell } from '../csv.js';
 
 const ACTIONS = {
   created: 'Created', moved: 'Moved', status: 'Status changed', edited: 'Edited',
@@ -68,7 +69,7 @@ export default function Reports() {
   const exportCsv = async () => {
     const all = []; let offset = 0; let r;
     do { r = await api.activity({ ...params(offset), limit: 1000 }); all.push(...r.items); offset += 1000; } while (r.more);
-    const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const cell = csvCell;
     const rows = [['Date', 'Time', 'By', 'Action', 'Booking ID', 'Customer / Title', 'Artist', 'Changes'],
       ...all.map((e) => {
         const d = toLocal(e.at);

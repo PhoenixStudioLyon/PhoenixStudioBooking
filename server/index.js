@@ -2,7 +2,7 @@
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { randomBytes, scryptSync, timingSafeEqual, randomUUID } from 'node:crypto';
-import { dirname, extname, join, resolve, normalize } from 'node:path';
+import { dirname, extname, join, resolve, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db, getSettings, saveSettings, newRef, seedIfEmpty } from './db.js';
 
@@ -36,7 +36,8 @@ function parseCookies(req) {
   const out = {};
   for (const part of (req.headers.cookie || '').split(';')) {
     const i = part.indexOf('=');
-    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    if (i <= 0) continue;
+    try { out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim()); } catch { /* ignore malformed cookie */ }
   }
   return out;
 }
@@ -103,6 +104,44 @@ const validLoginId = (id) => /^[^\s@]+@[^\s@]+$/.test(id) || /^[a-z0-9._-]{3,}$/
 const str = (v, max = 2000) => (v == null ? '' : String(v).trim().slice(0, max));
 const DT_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
 
+// ---------------------------------------------------------------- login throttling
+// After too many wrong passwords the login is refused for a while (HTTP 429), even with the right password.
+// Two counters: per account + client address (normal protection), and per account alone with a higher limit
+// (so changing address doesn't help an attacker, without letting one person lock the owner out too easily).
+const FAIL_WINDOW = 15 * 60 * 1000, LOCK_TIME = 15 * 60 * 1000;
+const LIMIT_PER_CLIENT = 10, LIMIT_PER_ACCOUNT = 30;
+const failures = new Map(); // key -> { count, first, lockedUntil }
+const clientAddress = (req) => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
+function throttleKeys(req, account) {
+  const acc = String(account || '').trim().toLowerCase();
+  return [[`c|${acc}|${clientAddress(req)}`, LIMIT_PER_CLIENT], [`a|${acc}`, LIMIT_PER_ACCOUNT]];
+}
+function assertNotLocked(keys) {
+  const now = Date.now();
+  for (const [k] of keys) {
+    const f = failures.get(k);
+    if (f?.lockedUntil > now) {
+      const min = Math.ceil((f.lockedUntil - now) / 60000);
+      throw new HttpError(429, `Too many wrong passwords. Try again in ${min} minute${min > 1 ? 's' : ''}.`);
+    }
+  }
+}
+function recordFailure(keys) {
+  const now = Date.now();
+  for (const [k, limit] of keys) {
+    let f = failures.get(k);
+    if (!f || now - f.first > FAIL_WINDOW) f = { count: 0, first: now, lockedUntil: 0 };
+    f.count++;
+    if (f.count >= limit) f.lockedUntil = now + LOCK_TIME;
+    failures.set(k, f);
+  }
+}
+const clearFailures = (keys) => keys.forEach(([k]) => failures.delete(k));
+setInterval(() => { // forget old entries
+  const now = Date.now();
+  for (const [k, f] of failures) if (now - f.first > FAIL_WINDOW && !(f.lockedUntil > now)) failures.delete(k);
+}, 10 * 60 * 1000).unref();
+
 // ---------------------------------------------------------------- router
 const routes = [];
 const route = (method, pattern, handler, { auth = true, admin = false } = {}) => {
@@ -133,8 +172,14 @@ route('POST', '/api/auth/setup', async (req, res) => {
 
 route('POST', '/api/auth/login', async (req, res) => {
   const b = await readJson(req);
+  const keys = throttleKeys(req, b.email);
+  assertNotLocked(keys);
   const u = db.prepare('SELECT * FROM users WHERE email = ?').get(str(b.email, 200));
-  if (!u || !checkPassword(String(b.password || ''), u.password_hash)) throw new HttpError(401, 'Wrong email or password');
+  if (!u || !checkPassword(String(b.password || ''), u.password_hash)) {
+    recordFailure(keys);
+    throw new HttpError(401, 'Wrong email or password');
+  }
+  clearFailures(keys);
   createSession(res, u.id);
   return { user: publicUser(u) };
 }, { auth: false });
@@ -148,10 +193,14 @@ route('POST', '/api/auth/logout', (req, res) => {
 
 route('POST', '/api/auth/password', async (req, _res, _p, user) => {
   const b = await readJson(req);
+  const keys = throttleKeys(req, `pw:${user.id}`);
+  assertNotLocked(keys);
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
-  if (!checkPassword(String(b.current || ''), u.password_hash)) bad('Current password is wrong');
+  if (!checkPassword(String(b.current || ''), u.password_hash)) { recordFailure(keys); bad('Current password is wrong'); }
   if (String(b.next || '').length < 8) bad('New password must be at least 8 characters');
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(b.next)), user.id);
+  // log out every other device of this user (this one stays logged in)
+  db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(user.id, parseCookies(req).sid || '');
   return { ok: true };
 });
 
@@ -196,6 +245,8 @@ route('PUT', '/api/users/:id', async (req, _res, p, me) => {
   if (b.password) {
     if (String(b.password).length < 8) bad('Password must be at least 8 characters');
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(String(b.password)), cur.id);
+    // a password reset by an admin logs that person out everywhere (except the admin's own current device)
+    db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(cur.id, parseCookies(req).sid || '');
   }
   return db.prepare(`${USER_SELECT} WHERE u.id = ?`).get(cur.id);
 }, ADMIN);
@@ -275,15 +326,19 @@ route('GET', '/api/team', () => {
 // ----- customers
 const CUSTOMER_FIELDS = ['name', 'phone', 'alt_phone', 'email', 'instagram', 'facebook', 'gender', 'birthday', 'address', 'city', 'postcode', 'country', 'notes'];
 
-// Artists use this only to pick a client when booking: they search by name and get masked results.
+// The part of a customer name artists can see ("Damien" of "Damien Goncalvez"); they can only search on it,
+// otherwise searching a surname would confirm a hidden name.
+const FIRST_WORD = (col) => `substr(trim(${col}) || ' ', 1, instr(trim(${col}) || ' ', ' ') - 1)`;
+
+// Artists use this only to pick a client when booking: they search by first name and get masked results.
 route('GET', '/api/customers', (req, _res, _p, user) => {
   const url = new URL(req.url, 'http://x');
   const q = `%${str(url.searchParams.get('q'), 100)}%`;
   const limit = Math.min(Number(url.searchParams.get('limit')) || 500, 5000);
   const count = `(SELECT COUNT(*) FROM bookings b WHERE b.customer_id = c.id AND b.status != 'cancelled') AS booking_count`;
   if (!user.is_admin) {
-    return db.prepare(`SELECT c.id, c.name, ${count} FROM customers c WHERE c.name LIKE ?
-      ORDER BY c.name COLLATE NOCASE LIMIT ?`).all(q, Math.min(limit, 50)).map(maskCustomer);
+    return db.prepare(`SELECT c.id, c.name, ${count} FROM customers c WHERE ${FIRST_WORD('c.name')} LIKE ?
+      ORDER BY c.name COLLATE NOCASE LIMIT ?`).all(`${str(url.searchParams.get('q'), 100)}%`, Math.min(limit, 50)).map(maskCustomer);
   }
   return db.prepare(`
     SELECT c.*, ${count}
@@ -378,7 +433,7 @@ route('GET', '/api/bookings', (req, _res, _p, user) => {
   if (u.get('q')) {
     const q = `%${str(u.get('q'), 100)}%`;
     if (user.is_admin) { where.push('(b.ref LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)'); args.push(q, q, q); }
-    else { where.push('(b.ref LIKE ? OR c.name LIKE ?)'); args.push(q, q); }
+    else { where.push(`(b.ref LIKE ? OR ${FIRST_WORD('c.name')} LIKE ?)`); args.push(q, `${str(u.get('q'), 100)}%`); }
   }
   const sql = `${BOOKING_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY b.start LIMIT 2000`;
   return db.prepare(sql).all(...args).map((b) => forViewer(b, user));
@@ -677,9 +732,11 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.
   '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2' };
 
 async function serveStatic(req, res) {
-  const urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  let urlPath;
+  try { urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname); }
+  catch { res.writeHead(400, { 'Content-Type': 'text/plain' }).end('Bad request'); return; }
   let file = normalize(join(STATIC_DIR, urlPath));
-  if (!file.startsWith(STATIC_DIR)) { res.writeHead(403).end(); return; }
+  if (file !== STATIC_DIR && !file.startsWith(STATIC_DIR + sep)) { res.writeHead(403).end(); return; }
   try {
     if ((await stat(file)).isDirectory()) file = join(file, 'index.html');
   } catch { file = join(STATIC_DIR, 'index.html'); } // SPA fallback
@@ -694,15 +751,36 @@ async function serveStatic(req, res) {
 }
 
 // ---------------------------------------------------------------- server
+// Browser security headers on every response
+const CSP = [
+  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com", "img-src 'self' data: blob:", "connect-src 'self'",
+  "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'", "object-src 'none'",
+].join('; ');
+function securityHeaders(res) {
+  res.setHeader('Content-Security-Policy', CSP);
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(self)');
+  if (SECURE_COOKIE) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+}
+
 const server = http.createServer(async (req, res) => {
-  const { pathname } = new URL(req.url, 'http://x');
-  if (!pathname.startsWith('/api/')) return serveStatic(req, res);
+  securityHeaders(res);
+  let pathname;
+  try { pathname = new URL(req.url, 'http://x').pathname; } catch { res.writeHead(400).end(); return; }
+  if (!pathname.startsWith('/api/')) {
+    // never let a problem serving a file take the whole server down
+    return serveStatic(req, res).catch((e) => { console.error(e); if (!res.headersSent) res.writeHead(500).end(); });
+  }
   try {
     for (const r of routes) {
       if (r.method !== req.method) continue;
       const m = pathname.match(r.re);
       if (!m) continue;
-      const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
+      let params;
+      try { params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])])); } catch { bad('Bad address'); }
       const user = currentUser(req);
       if (r.auth && !user) throw new HttpError(401, 'Please log in');
       if (r.admin && !user.is_admin) throw new HttpError(403, 'Only an admin can do this');
@@ -717,5 +795,7 @@ const server = http.createServer(async (req, res) => {
     send(res, 500, { error: 'Server error' });
   }
 });
+
+process.on('unhandledRejection', (e) => console.error('Unhandled error:', e));
 
 server.listen(PORT, () => console.log(`Phoenix booking running on http://localhost:${PORT}`));

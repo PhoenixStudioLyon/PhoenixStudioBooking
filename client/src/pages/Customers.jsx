@@ -9,6 +9,7 @@ import { api } from '../api.js';
 import { navigate } from '../App.jsx';
 import { prettyShortDate } from '../dates.js';
 import { customersFromCsv } from '../importCustomers.js';
+import { csvCell } from '../csv.js';
 
 // Pick a CSV (e.g. Picktime: Customers > Export), preview it, then import
 function ImportCustomers({ onClose, onDone }) {
@@ -60,7 +61,6 @@ function ImportCustomers({ onClose, onDone }) {
   );
 }
 
-const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
 export default function Customers() {
   const [q, setQ] = useState('');
