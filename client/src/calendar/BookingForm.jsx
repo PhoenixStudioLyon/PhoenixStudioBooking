@@ -6,7 +6,7 @@ import { api } from '../api.js';
 import { useApp, usePerms } from '../App.jsx';
 import CustomerModal from '../components/CustomerModal.jsx';
 import DateField from '../components/DateField.jsx';
-import { PhotoGrid, imageFiles, shrinkImage } from '../components/Photos.jsx';
+import { PhotoGrid, imageFiles, uploadPhoto } from '../components/Photos.jsx';
 import { datePart, fromMin, longTime, minutesBetween, timePart, toMin, durationLabel, addMinutesDT, prettyShortDate } from '../dates.js';
 
 const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => fromMin(i * 15));
@@ -132,7 +132,7 @@ export default function BookingForm({ initial, onClose, onSaved }) {
     const failed = [];
     for (const id of removedPhotos) await api.deletePhoto(id).catch(() => {});
     for (const p of photos.filter((x) => x.file)) {
-      try { await api.uploadPhoto(bookingId, await shrinkImage(p.file)); } catch (e) { failed.push(e.message); }
+      try { await uploadPhoto(bookingId, p.file); } catch (e) { failed.push(e.message); }
     }
     if (failed.length) toast(`${failed.length} photo${failed.length > 1 ? 's' : ''} could not be saved: ${failed[0]}`, 'error');
   };
@@ -294,7 +294,7 @@ export default function BookingForm({ initial, onClose, onSaved }) {
         <div className="field span-2" onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); addPhotos(imageFiles(e.dataTransfer.files)); }}>
           <span className="lbl">Photos</span>
-          <PhotoGrid photos={photos} onRemove={removePhoto} onAdd={addPhotos} />
+          <PhotoGrid photos={photos} backfill onRemove={removePhoto} onAdd={addPhotos} />
           {!editing && f.recurFreq && photos.length > 0 && <span className="muted photo-note">Photos are added to the first booking of the series.</span>}
         </div>
       </div>

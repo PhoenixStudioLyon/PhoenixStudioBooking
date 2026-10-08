@@ -4,6 +4,7 @@ import { api } from '../api.js';
 
 export const PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif';
 const MAX_SIDE = 2000;
+const THUMB_SIDE = 240; // preview size for the photo squares (shown at 96px, sharp on phone screens)
 
 // Big phone photos are scaled down to MAX_SIDE px (JPEG) before upload to keep the database small.
 // GIFs and pictures the browser can't decode (e.g. HEIC outside Safari) are sent as they are.
@@ -28,20 +29,59 @@ export async function shrinkImage(file) {
   }
 }
 
+// Small JPEG preview from a file or an already loaded <img>. Returns null if the browser can't read the picture.
+export async function makeThumb(source) {
+  try {
+    const bmp = source instanceof HTMLImageElement ? source : await createImageBitmap(source, { imageOrientation: 'from-image' });
+    const w = bmp.naturalWidth || bmp.width, h = bmp.naturalHeight || bmp.height;
+    if (!w || !h) return null;
+    const scale = Math.min(1, THUMB_SIDE / Math.min(w, h)); // the square crops the long side, so size by the short one
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    if (bmp.close) bmp.close();
+    return await new Promise((ok) => canvas.toBlob(ok, 'image/jpeg', 0.8));
+  } catch {
+    return null;
+  }
+}
+
+// Uploads a photo (scaled down) and its preview
+export async function uploadPhoto(bookingId, file) {
+  const photo = await shrinkImage(file);
+  const saved = await api.uploadPhoto(bookingId, photo);
+  const thumb = await makeThumb(photo);
+  if (thumb) await api.uploadThumb(saved.id, thumb).catch(() => {}); // without a preview the full photo is shown
+  return saved;
+}
+
 // Picks image files out of a paste / drop / file-input event
 export const imageFiles = (list) => Array.from(list || []).filter((f) => f.type.startsWith('image/'));
 
-// Photo thumbnails. Each photo is { id } (saved) or { key, url } (not uploaded yet).
-export function PhotoGrid({ photos, onRemove, onAdd, busy }) {
+// Photo squares. Each photo is { id, has_thumb } (saved) or { key, url } (not uploaded yet).
+// The squares load the small preview; the full photo is only loaded in the viewer.
+// backfill: when allowed to edit, photos uploaded before previews existed get one the first time they're shown.
+const backfilled = new Set();
+export function PhotoGrid({ photos, onRemove, onAdd, busy, backfill = false }) {
   const input = useRef(null);
   const [open, setOpen] = useState(null);
   const src = (p) => p.url || api.photoUrl(p.id);
+  const thumbSrc = (p) => p.url || (p.has_thumb ? api.thumbUrl(p.id) : api.photoUrl(p.id));
+  const makeMissingThumb = async (p, img) => {
+    if (!backfill || !p.id || p.has_thumb || backfilled.has(p.id)) return;
+    backfilled.add(p.id);
+    const thumb = await makeThumb(img);
+    if (thumb) api.uploadThumb(p.id, thumb).catch(() => {});
+  };
   return (
     <div className="photo-grid">
       {photos.map((p, i) => (
         <div className="photo-thumb" key={p.id || p.key}>
           <button type="button" className="photo-open" onClick={() => setOpen(i)} aria-label="View photo">
-            <img src={src(p)} alt={p.name || 'Photo'} loading="lazy" />
+            <img src={thumbSrc(p)} alt={p.name || 'Photo'} loading="lazy" onLoad={(e) => makeMissingThumb(p, e.currentTarget)} />
           </button>
           {onRemove && (
             <button type="button" className="photo-remove" onClick={() => onRemove(p)} aria-label="Remove photo"><LuX /></button>

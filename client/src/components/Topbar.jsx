@@ -1,4 +1,4 @@
-import { LuBell, LuMessageSquare, LuMenu, LuSearch, LuMoon, LuSun } from 'react-icons/lu';
+import { LuMenu, LuSearch, LuMoon, LuSun } from 'react-icons/lu';
 import { useApp } from '../App.jsx';
 import { initials } from './Sidebar.jsx';
 import { useTheme } from '../theme.js';
@@ -25,8 +25,6 @@ export default function Topbar({ icon: Icon, title, crumb, search, children }) {
         {children}
         <button className="round-btn theme-toggle" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Light theme' : 'Dark theme'}
           title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}>{theme === 'dark' ? <LuSun /> : <LuMoon />}</button>
-        <button className="round-btn hide-sm" aria-label="Notifications"><LuBell /></button>
-        <button className="round-btn hide-sm" aria-label="Messages"><LuMessageSquare /></button>
         <div className="biz-pill">
           <span className="biz-logo">{initials(meta.settings.businessName)}</span>
           <span className="hide-sm">{meta.settings.businessName}</span>

@@ -679,7 +679,7 @@ route('POST', '/api/bookings/import', async (req) => {
 // ----- booking photos (stored in the database so backing up phoenix.db keeps them)
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
 const PHOTO_MAX = 15 * 1024 * 1024;
-const PHOTO_META = 'SELECT id, booking_id, name, mime, length(data) AS size, created_at FROM booking_photos';
+const PHOTO_META = 'SELECT id, booking_id, name, mime, length(data) AS size, (thumb IS NOT NULL) AS has_thumb, created_at FROM booking_photos';
 
 route('GET', '/api/bookings/:id/photos', (_req, _res, p) =>
   db.prepare(`${PHOTO_META} WHERE booking_id = ? ORDER BY id`).all(p.id));
@@ -697,6 +697,25 @@ route('POST', '/api/bookings/:id/photos', async (req, _res, p, user) => {
     .run(p.id, name, mime, data).lastInsertRowid;
   logActivity(user, 'photo_added', bookingView(p.id), [{ label: 'Photo', from: '', to: name || 'photo' }]);
   return db.prepare(`${PHOTO_META} WHERE id = ?`).get(id);
+});
+
+// Small preview shown in the photo squares (the full photo is only loaded when it's opened)
+route('GET', '/api/photos/:id/thumb', (_req, res, p) => {
+  const ph = db.prepare('SELECT thumb FROM booking_photos WHERE id = ? AND thumb IS NOT NULL').get(p.id) || notFound('No preview');
+  res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': ph.thumb.length, 'Cache-Control': 'private, max-age=31536000, immutable' });
+  res.end(ph.thumb);
+});
+
+// The browser sends the preview right after uploading a photo, or later for photos that don't have one yet.
+// A preview is only set once, so a cached preview never becomes outdated.
+route('POST', '/api/photos/:id/thumb', async (req, _res, p, user) => {
+  const owner = db.prepare('SELECT b.* FROM booking_photos ph JOIN bookings b ON b.id = ph.booking_id WHERE ph.id = ?').get(p.id) || notFound('Photo not found');
+  assertCanEdit(user, owner);
+  if (String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase() !== 'image/jpeg') bad('Preview must be a JPEG');
+  const data = await readRaw(req, 400 * 1024);
+  if (!data.length) bad('Empty preview');
+  db.prepare('UPDATE booking_photos SET thumb = ? WHERE id = ? AND thumb IS NULL').run(data, p.id);
+  return { ok: true };
 });
 
 route('GET', '/api/photos/:id', (_req, res, p) => {

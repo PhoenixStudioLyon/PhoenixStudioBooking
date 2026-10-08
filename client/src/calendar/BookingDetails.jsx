@@ -5,7 +5,7 @@ import Dropdown from '../components/Dropdown.jsx';
 import { toast } from '../components/Toast.jsx';
 import { api } from '../api.js';
 import { useApp, usePerms } from '../App.jsx';
-import { PhotoGrid, shrinkImage } from '../components/Photos.jsx';
+import { PhotoGrid, uploadPhoto } from '../components/Photos.jsx';
 import CustomerModal from '../components/CustomerModal.jsx';
 import { STATUS, bookingTitle } from './BookingBlock.jsx';
 import { bookedOn, datePart, durationLabel, longTime, minutesBetween, prettyDate, timePart } from '../dates.js';
@@ -30,7 +30,7 @@ export default function BookingDetails({ booking: b, onClose, onEdit, onChanged 
     if (!files.length) return;
     setUploading(true);
     try {
-      for (const file of files) await api.uploadPhoto(b.id, await shrinkImage(file));
+      for (const file of files) await uploadPhoto(b.id, file);
       toast(files.length > 1 ? `${files.length} photos added` : 'Photo added');
     } catch (e) { toast(e.message, 'error'); }
     setUploading(false);
@@ -109,7 +109,7 @@ export default function BookingDetails({ booking: b, onClose, onEdit, onChanged 
       <div className="details-photos">
         <div className="lbl">Photos</div>
         {!canEdit && photos.length === 0 && <span className="muted">No photos</span>}
-        <PhotoGrid photos={photos} onAdd={canEdit ? addPhotos : null} busy={uploading} onRemove={canEdit ? setPhotoToDelete : null} />
+        <PhotoGrid photos={photos} backfill={canEdit} onAdd={canEdit ? addPhotos : null} busy={uploading} onRemove={canEdit ? setPhotoToDelete : null} />
       </div>
 
       {confirm === 'cancel' && (

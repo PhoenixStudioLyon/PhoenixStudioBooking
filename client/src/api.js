@@ -63,6 +63,8 @@ export const api = {
   uploadPhoto: (bookingId, file) => upload(`/api/bookings/${bookingId}/photos`, file),
   deletePhoto: (id) => request('DELETE', `/api/photos/${id}`),
   photoUrl: (id) => `/api/photos/${id}`,
+  thumbUrl: (id) => `/api/photos/${id}/thumb`,
+  uploadThumb: (id, blob) => upload(`/api/photos/${id}/thumb`, new File([blob], 'thumb.jpg', { type: 'image/jpeg' })),
 
   customers: (params) => request('GET', '/api/customers' + qs(params)),
   customer: (id) => request('GET', `/api/customers/${id}`),
