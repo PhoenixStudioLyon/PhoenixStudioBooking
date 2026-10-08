@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LuCalendarDays, LuChevronLeft, LuChevronRight, LuCalendarPlus, LuUser, LuSettings } from 'react-icons/lu';
+import { LuCalendarDays, LuChevronLeft, LuChevronRight, LuCalendarPlus, LuUser, LuSettings, LuUpload } from 'react-icons/lu';
 import Topbar from '../components/Topbar.jsx';
 import { toast } from '../components/Toast.jsx';
 import { Confirm } from '../components/Modal.jsx';
@@ -9,6 +9,7 @@ import TimeGrid from './TimeGrid.jsx';
 import MonthGrid from './MonthGrid.jsx';
 import BookingForm from './BookingForm.jsx';
 import BookingDetails from './BookingDetails.jsx';
+import ImportBookings from './ImportBookings.jsx';
 import { bookingTitle } from './BookingBlock.jsx';
 import {
   DAY_SHORT, MONTH_LONG, MONTH_SHORT, addDays, addMonths, datePart, dayOfWeek, fromMin, fromYMD, longTime,
@@ -54,7 +55,7 @@ function BookingSearch({ onPick }) {
 }
 
 export default function CalendarPage() {
-  const { meta } = useApp();
+  const { meta, reloadMeta } = useApp();
   const perms = usePerms();
   const { settings, team, locations } = meta;
   const [view, setView] = useState(() => store.get('view', 'week'));
@@ -69,6 +70,7 @@ export default function CalendarPage() {
   const [form, setForm] = useState(null);       // initial data for BookingForm
   const [details, setDetails] = useState(null); // booking shown in details modal
   const [pendingMove, setPendingMove] = useState(null);
+  const [importing, setImporting] = useState(false);
   const pickerRef = useRef(null);
 
   useEffect(() => store.set('view', view), [view]);
@@ -207,6 +209,7 @@ export default function CalendarPage() {
               onClick={(e) => { try { e.currentTarget.showPicker(); } catch { /* older browsers */ } }} />
           </label>
           {perms.canCreate && <button className="btn btn-primary btn-new" onClick={() => openNew()}>+New</button>}
+          {perms.isAdmin && <button className="icon-btn" onClick={() => setImporting(true)} title="Import bookings (Picktime export)"><LuUpload /></button>}
           {perms.isAdmin && <button className="icon-btn" onClick={() => navigate('/setup')} title="Calendar settings"><LuSettings /></button>}
         </div>
       </div>
@@ -239,6 +242,7 @@ export default function CalendarPage() {
             load();
           }} />
       )}
+      {importing && <ImportBookings onClose={() => setImporting(false)} onDone={() => { reloadMeta(); load(); }} />}
       {pendingMove && (
         <Confirm title="Time overlap" confirmLabel="Move anyway"
           message={`The new time overlaps ${pendingMove.overlaps.length} other booking(s). Move it anyway?`}

@@ -57,6 +57,7 @@ export const api = {
   booking: (id) => request('GET', `/api/bookings/${id}`),
   createBooking: (b) => request('POST', '/api/bookings', b),
   updateBooking: (id, b) => request('PUT', `/api/bookings/${id}`, b),
+  importBookings: (bookings) => request('POST', '/api/bookings/import', { bookings }),
   deleteBooking: (id) => request('DELETE', `/api/bookings/${id}`),
   bookingPhotos: (id) => request('GET', `/api/bookings/${id}/photos`),
   uploadPhoto: (bookingId, file) => upload(`/api/bookings/${bookingId}/photos`, file),

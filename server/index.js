@@ -533,6 +533,84 @@ route('DELETE', '/api/bookings/:id', (_req, _res, p, user) => {
   return { ok: true };
 }, ADMIN);
 
+// ----- bulk import (e.g. a Picktime bookings export parsed in the browser)
+// Each item: { artist, service, start, end, status, notes, blocker, title, customer: { name, phone, email, instagram } }
+// Missing artists, services and customers are created. A booking already present (same artist, start and
+// customer/title) is skipped, so importing the same file twice is safe. Overlaps are allowed (it's history).
+const IMPORT_COLORS = ['#6F8A72', '#6F8FA6', '#B8893F', '#9A6A86', '#A0523D', '#5E7C8C', '#8A7A5C', '#B5707A', '#4F6B5A', '#C8643F'];
+route('POST', '/api/bookings/import', async (req) => {
+  const { bookings = [] } = await readJson(req, 20e6);
+  if (!Array.isArray(bookings) || bookings.length > 20000) bad('Send up to 20000 bookings');
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const digits = (s) => String(s || '').replace(/\D/g, '');
+
+  const team = new Map(db.prepare('SELECT id, name FROM team_members WHERE active = 1').all().map((t) => [norm(t.name), t.id]));
+  const services = new Map(db.prepare('SELECT id, name FROM services WHERE active = 1').all().map((s) => [norm(s.name), s.id]));
+  const customers = new Map();
+  for (const c of db.prepare('SELECT id, name, phone FROM customers').all()) {
+    customers.set(`${norm(c.name)}|${digits(c.phone)}`, c.id);
+    if (!customers.has(`${norm(c.name)}|*`)) customers.set(`${norm(c.name)}|*`, c.id); // fallback when the booking has no phone
+  }
+  const existing = new Set(db.prepare('SELECT team_member_id, start, customer_id, title FROM bookings').all()
+    .map((b) => `${b.team_member_id}|${b.start}|${b.customer_id || ''}|${b.customer_id ? '' : norm(b.title)}`));
+  const location = db.prepare('SELECT id FROM locations ORDER BY id LIMIT 1').get()?.id ?? null;
+
+  const insTeam = db.prepare('INSERT INTO team_members (name, color) VALUES (?, ?)');
+  const insSvc = db.prepare('INSERT INTO services (name, duration_min, price) VALUES (?, 60, 0)');
+  const insCust = db.prepare('INSERT INTO customers (name, phone, email, instagram) VALUES (?, ?, ?, ?)');
+  const insBk = db.prepare(`INSERT INTO bookings (ref, type, title, customer_id, location_id, service_id, team_member_id,
+                            start, end, price, notes, status) VALUES (?,?,?,?,?,?,?,?,?,0,?,?)`);
+  const out = { added: 0, blockers: 0, skipped: 0, invalid: 0, artistsCreated: [], servicesCreated: [], customersCreated: 0 };
+
+  db.exec('BEGIN');
+  try {
+    for (const b of bookings) {
+      const start = String(b?.start || ''), end = String(b?.end || '');
+      const artist = str(b?.artist, 100);
+      if (!DT_RE.test(start) || !DT_RE.test(end) || end <= start || !artist) { out.invalid++; continue; }
+
+      let teamId = team.get(norm(artist));
+      if (!teamId) {
+        teamId = Number(insTeam.run(artist, IMPORT_COLORS[out.artistsCreated.length % IMPORT_COLORS.length]).lastInsertRowid);
+        team.set(norm(artist), teamId); out.artistsCreated.push(artist);
+      }
+      const status = ['confirmed', 'pending', 'completed', 'no_show', 'cancelled'].includes(b.status) ? b.status : 'confirmed';
+      const notes = str(b.notes, 5000);
+
+      if (b.blocker) {
+        const title = str(b.title, 200) || 'Time Blocker';
+        const key = `${teamId}|${start}||${norm(title)}`;
+        if (existing.has(key)) { out.skipped++; continue; }
+        existing.add(key);
+        insBk.run(newRef(), 'blocker', title, null, location, null, teamId, start, end, notes, 'confirmed');
+        out.blockers++; continue;
+      }
+
+      const svcName = str(b.service, 100) || 'Tattoo';
+      let svcId = services.get(norm(svcName));
+      if (!svcId) { svcId = Number(insSvc.run(svcName).lastInsertRowid); services.set(norm(svcName), svcId); out.servicesCreated.push(svcName); }
+
+      const c = b.customer || {};
+      const cname = str(c.name, 200) || 'Unknown customer';
+      const phone = str(c.phone, 50);
+      let custId = customers.get(`${norm(cname)}|${digits(phone)}`) ?? (phone ? undefined : customers.get(`${norm(cname)}|*`));
+      if (!custId) {
+        custId = Number(insCust.run(cname, phone, str(c.email, 200), str(c.instagram, 100)).lastInsertRowid);
+        customers.set(`${norm(cname)}|${digits(phone)}`, custId);
+        if (!customers.has(`${norm(cname)}|*`)) customers.set(`${norm(cname)}|*`, custId);
+        out.customersCreated++;
+      }
+      const key = `${teamId}|${start}|${custId}|`;
+      if (existing.has(key)) { out.skipped++; continue; }
+      existing.add(key);
+      insBk.run(newRef(), 'appointment', '', custId, location, svcId, teamId, start, end, notes, status);
+      out.added++;
+    }
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  return out;
+}, ADMIN);
+
 // ----- booking photos (stored in the database so backing up phoenix.db keeps them)
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
 const PHOTO_MAX = 15 * 1024 * 1024;

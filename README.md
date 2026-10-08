@@ -24,6 +24,7 @@ The first launch adds a few fictional "Demo – …" customers and bookings so t
   - You can add photos to a booking (pick files, drag them in, or paste into the notes). Large photos are scaled down, and they're stored in the database file.
   - You get a warning when a booking overlaps another one for the same team member.
   - You can search by booking ID, customer name or phone.
+  - **Import bookings** (upload icon in the calendar toolbar, admins): accepts the Picktime bookings export as `.xlsx` or `.csv`, previews it, creates missing artists/booking types/customers, turns non-client entries (conventions, guests, appointments…) into time blockers, and skips bookings already imported.
 - **Customers**: a searchable list with selection, CSV export and bulk delete. Each customer has a details page with Details / Address / Notes / Booking history tabs.
 - **Logins and roles** (Setup → Logins): each login is an **Admin**, a **Tattoo artist** (linked to their calendar column), or both.
   - Admins manage everything: all clients, every artist's calendar, settings and logins.
