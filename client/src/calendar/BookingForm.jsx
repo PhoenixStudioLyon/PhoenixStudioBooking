@@ -288,8 +288,13 @@ export default function BookingForm({ initial, onClose, onSaved }) {
         </div>
 
         <label className="field span-2"><span className="lbl">Booking Notes</span>
-          <textarea className="input" rows={4} value={f.notes} onChange={set('notes')} onPaste={pastePhotos}
-            placeholder="You can also paste a picture here" />
+          {editing && !perms.isAdmin ? <>
+            <textarea className="input" rows={4} value={f.notes} readOnly onPaste={pastePhotos} />
+            <span className="muted note-lock">Only an admin can change the booking note. Add an artist note in the appointment details instead.</span>
+          </> : (
+            <textarea className="input" rows={4} value={f.notes} onChange={set('notes')} onPaste={pastePhotos}
+              placeholder="You can also paste a picture here" />
+          )}
         </label>
         <div className="field span-2" onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); addPhotos(imageFiles(e.dataTransfer.files)); }}>

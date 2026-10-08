@@ -109,6 +109,17 @@ CREATE TABLE IF NOT EXISTS activity_log (
 );
 CREATE INDEX IF NOT EXISTS idx_activity_at ON activity_log(at);
 CREATE INDEX IF NOT EXISTS idx_activity_booking ON activity_log(booking_id, action);
+-- Artist notes: added after booking, each signed by its author (the booking's own note stays as written)
+CREATE TABLE IF NOT EXISTS booking_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+  user_id INTEGER,
+  user_name TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_booking_notes_booking ON booking_notes(booking_id);
 `);
 
 // ---------- migrations for databases created by older versions

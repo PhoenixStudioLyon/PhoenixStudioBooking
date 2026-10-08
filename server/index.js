@@ -569,7 +569,10 @@ route('PUT', '/api/bookings/:id', async (req, _res, p, user) => {
   const cur = db.prepare('SELECT * FROM bookings WHERE id = ?').get(p.id) || notFound('Booking not found');
   assertCanEdit(user, cur);
   const b = await readJson(req);
-  if (!user.is_admin) b.team_member_id = user.team_member_id; // can't hand a booking to someone else
+  if (!user.is_admin) {
+    b.team_member_id = user.team_member_id; // can't hand a booking to someone else
+    b.notes = cur.notes;                     // the booking note is admin-only once booked (artists add artist notes)
+  }
   const v = validateBooking({ ...cur, ...b });
   if (!b.allowOverlap) {
     const clashes = findOverlaps(v, cur.id);
@@ -675,6 +678,51 @@ route('POST', '/api/bookings/import', async (req) => {
   } catch (e) { db.exec('ROLLBACK'); throw e; }
   return out;
 }, ADMIN);
+
+// ----- artist notes (everyone can read; admins and the booking's own artist can add;
+// authors edit/delete their own notes, admins any note)
+const NOTE_SELECT = 'SELECT id, booking_id, user_id, user_name, body, created_at, updated_at FROM booking_notes';
+const noteWithBooking = (id) => {
+  const n = db.prepare(`${NOTE_SELECT} WHERE id = ?`).get(id) || notFound('Note not found');
+  return { n, b: bookingView(n.booking_id) };
+};
+const assertNoteAuthor = (user, n) => {
+  if (!user.is_admin && n.user_id !== user.id) throw new HttpError(403, 'You can only change your own notes');
+};
+
+route('GET', '/api/bookings/:id/notes', (_req, _res, p) =>
+  db.prepare(`${NOTE_SELECT} WHERE booking_id = ? ORDER BY id`).all(p.id));
+
+route('POST', '/api/bookings/:id/notes', async (req, _res, p, user) => {
+  const bk = bookingView(p.id) || notFound('Booking not found');
+  assertCanEdit(user, bk);
+  const body = str((await readJson(req)).body, 5000);
+  if (!body) bad('The note is empty');
+  const id = db.prepare('INSERT INTO booking_notes (booking_id, user_id, user_name, body) VALUES (?, ?, ?, ?)')
+    .run(bk.id, user.id, user.name, body).lastInsertRowid;
+  logActivity(user, 'note_added', bk, [{ label: 'Artist note', from: '', to: body }]);
+  return db.prepare(`${NOTE_SELECT} WHERE id = ?`).get(id);
+});
+
+route('PUT', '/api/notes/:id', async (req, _res, p, user) => {
+  const { n, b } = noteWithBooking(p.id);
+  assertNoteAuthor(user, n);
+  const body = str((await readJson(req)).body, 5000);
+  if (!body) bad('The note is empty');
+  if (body !== n.body) {
+    db.prepare("UPDATE booking_notes SET body = ?, updated_at = datetime('now') WHERE id = ?").run(body, n.id);
+    if (b) logActivity(user, 'note_edited', b, [{ label: 'Artist note', from: n.body, to: body }]);
+  }
+  return db.prepare(`${NOTE_SELECT} WHERE id = ?`).get(n.id);
+});
+
+route('DELETE', '/api/notes/:id', (_req, _res, p, user) => {
+  const { n, b } = noteWithBooking(p.id);
+  assertNoteAuthor(user, n);
+  db.prepare('DELETE FROM booking_notes WHERE id = ?').run(n.id);
+  if (b) logActivity(user, 'note_removed', b, [{ label: 'Artist note', from: n.body, to: '' }]);
+  return { ok: true };
+});
 
 // ----- booking photos (stored in the database so backing up phoenix.db keeps them)
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];

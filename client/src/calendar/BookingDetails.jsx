@@ -7,6 +7,7 @@ import { api } from '../api.js';
 import { useApp, usePerms } from '../App.jsx';
 import { PhotoGrid, uploadPhoto } from '../components/Photos.jsx';
 import CustomerModal from '../components/CustomerModal.jsx';
+import ArtistNotes from './ArtistNotes.jsx';
 import { STATUS, bookingTitle } from './BookingBlock.jsx';
 import { bookedOn, datePart, durationLabel, longTime, minutesBetween, prettyDate, timePart } from '../dates.js';
 
@@ -106,6 +107,7 @@ export default function BookingDetails({ booking: b, onClose, onEdit, onChanged 
       <dl className="details">
         {rows.filter(([, v]) => v).map(([k, v]) => (<div key={k}><dt>{k}</dt><dd>{v}</dd></div>))}
       </dl>
+      <ArtistNotes bookingId={b.id} canAdd={canEdit} />
       <div className="details-photos">
         <div className="lbl">Photos</div>
         {!canEdit && photos.length === 0 && <span className="muted">No photos</span>}

@@ -11,6 +11,7 @@ import { csvCell } from '../csv.js';
 const ACTIONS = {
   created: 'Created', moved: 'Moved', status: 'Status changed', edited: 'Edited',
   deleted: 'Deleted', photo_added: 'Photo added', photo_removed: 'Photo removed',
+  note_added: 'Artist note added', note_edited: 'Artist note edited', note_removed: 'Artist note deleted',
 };
 const PERIODS = [['today', 'Today'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['all', 'All time']];
 const PAGE = 100;
