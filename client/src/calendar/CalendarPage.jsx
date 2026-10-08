@@ -181,10 +181,12 @@ export default function CalendarPage() {
 
       <div className="cal-toolbar">
         <div className="tb-left">
-          <select className="pill-select" value={locationId} onChange={(e) => setLocationId(e.target.value ? Number(e.target.value) : '')}>
-            <option value="">All Locations</option>
-            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
+          {locations.length > 1 && (
+            <select className="pill-select" value={locationId} onChange={(e) => setLocationId(e.target.value ? Number(e.target.value) : '')}>
+              <option value="">All Locations</option>
+              {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          )}
           <select className="pill-select" value={teamId} onChange={(e) => setTeamId(e.target.value ? Number(e.target.value) : '')}>
             <option value="">All Team Members</option>
             {team.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -199,8 +201,10 @@ export default function CalendarPage() {
 
         <div className="tb-right">
           <div className="seg">
-            {[['week', 'Weekly'], ['day', 'Daily'], ['month', 'Monthly']].map(([k, l]) => (
-              <button key={k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{l}</button>
+            {[['week', 'Weekly', 'Week'], ['day', 'Daily', 'Day'], ['month', 'Monthly', 'Month']].map(([k, l, short]) => (
+              <button key={k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>
+                <span className="lbl-long">{l}</span><span className="lbl-short">{short}</span>
+              </button>
             ))}
           </div>
           <label className="icon-btn picker-btn" title="Jump to date">
@@ -208,9 +212,9 @@ export default function CalendarPage() {
             <input ref={pickerRef} type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)}
               onClick={(e) => { try { e.currentTarget.showPicker(); } catch { /* older browsers */ } }} />
           </label>
-          {perms.canCreate && <button className="btn btn-primary btn-new" onClick={() => openNew()}>+New</button>}
-          {perms.isAdmin && <button className="icon-btn" onClick={() => setImporting(true)} title="Import bookings (Picktime export)"><LuUpload /></button>}
-          {perms.isAdmin && <button className="icon-btn" onClick={() => navigate('/setup')} title="Calendar settings"><LuSettings /></button>}
+          {perms.canCreate && <button className="btn btn-primary btn-new" onClick={() => openNew()} aria-label="New booking">+<span className="lbl-long">New</span></button>}
+          {perms.isAdmin && <button className="icon-btn hide-sm" onClick={() => setImporting(true)} title="Import bookings (Picktime export)"><LuUpload /></button>}
+          {perms.isAdmin && <button className="icon-btn hide-sm" onClick={() => navigate('/setup')} title="Calendar settings"><LuSettings /></button>}
         </div>
       </div>
 

@@ -223,8 +223,9 @@ select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csv
 .seg button:hover { background: var(--bg-soft); }
 .seg button.on { background: var(--primary); color: var(--on-primary); font-weight: 600; }
 .picker-btn { position: relative; overflow: hidden; }
+.lbl-short { display: none; }
 .picker-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-.btn-new { padding: 8px 14px; }
+.btn-new { padding: 8px 14px; gap: 1px; }
 .cal-body { flex: 1; min-height: 0; display: flex; }
 
 /* ============ Time grid ============ */
@@ -553,14 +554,44 @@ button.tg-day.is-today:hover .tg-num { background: var(--accent); }
   .topbar { gap: 8px; padding: 8px 12px; }
   .top-search { margin-left: 4px; }
   .page-title h1 { font-size: 18px; }
-  .cal-toolbar { padding: 10px 12px; gap: 8px; }
-  .tb-left, .tb-right { width: 100%; flex-wrap: wrap; }
-  .tb-right { margin-left: 0; }
-  .pill-select { flex: 1; max-width: none; }
-  .date-nav { width: 100%; }
-  .date-nav .date-label { flex: 1; min-width: 0; padding: 8px; }
-  .seg { flex: 1; } .seg button { flex: 1; padding: 8px 4px; }
-  .tg-member { justify-content: flex-start; padding-left: 12px; }
+  /* calendar toolbar: date on the first line, then artist / view / picker / + */
+  .cal-toolbar { padding: 8px 10px; gap: 6px; }
+  .date-nav { order: 1; width: 100%; margin: 0; }
+  .date-nav button { padding: 6px 10px; }
+  .date-nav .date-label { flex: 1; min-width: 0; padding: 6px; font-size: 13px; }
+  .tb-left { order: 2; flex: 1; min-width: 0; gap: 6px; }
+  .tb-right { order: 3; margin-left: 0; gap: 4px; }
+  .pill-select { flex: 1; min-width: 0; max-width: none; padding: 6px 26px 6px 10px; font-size: 13px; background-position: right 8px center; }
+  .seg { padding: 2px; } .seg button { padding: 5px 7px; font-size: 12.5px; }
+  .lbl-long { display: none; } .lbl-short { display: inline; }
+  .btn-new { padding: 6px 12px; font-size: 18px; line-height: 1; }
+  .picker-btn { width: 30px; }
+
+  /* time grid: the whole week (or every artist) fits the screen width, no sideways scrolling */
+  .tg-inner { min-width: 0; }
+  .tg-head-row, .tg-body { grid-template-columns: 42px repeat(var(--cols), minmax(0, 1fr)); }
+  .tg-time { right: 4px; font-size: 9.5px; }
+  .tg-member { font-size: 12px; padding: 4px; }
+  button.tg-day { padding: 5px 0; gap: 2px; }
+  .tg-dow { font-size: 9px; letter-spacing: .06em; }
+  .tg-num { width: 24px; height: 24px; font-size: 13px; }
+  .tg-day { font-size: 10.5px; padding: 6px 2px; gap: 3px; }
+  .tg-day .dot { width: 7px; height: 7px; flex: none; }
+  .tg-cell-label { display: none; }
+  .bk { font-size: 10px; line-height: 1.2; border-left-width: 2px; border-radius: 4px; container-type: inline-size; }
+  .bk-text { padding: 2px 3px; word-break: break-all; }
+  .bk-time { font-size: 9px; }
+  .bk-for, .bk-svc, .bk-status, .bk-photo { display: none; }
+
+  /* month grid fits too */
+  .mg-head, .mg-body { min-width: 0; }
+  .mg-head, .mg-week { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .mg-week { min-height: 92px; }
+  .mg-dow { padding: 6px 0; font-size: 9px; letter-spacing: .06em; }
+  .mg-day { padding: 2px 1px 4px; }
+  .bk-compact { min-height: 0; margin-bottom: 2px; font-size: 9px; }
+  .bk-compact .bk-text { padding: 1px 3px; }
+  .bk-compact .bk-time { display: none; }
   .form-grid { grid-template-columns: 1fr; }
   .span-2 { grid-column: auto; }
   .quick-cust { grid-template-columns: 1fr; }
@@ -592,3 +623,6 @@ button.tg-day.is-today:hover .tg-num { background: var(--accent); }
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23bbb' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 .theme-toggle svg { transition: transform .3s; }
+
+/* booking tiles too narrow for readable text: show the colour only (tap still opens it) */
+@container (max-width: 34px) { .bk-text { display: none; } }
