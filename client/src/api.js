@@ -75,6 +75,7 @@ export const api = {
   team: () => request('GET', '/api/team'),
   createTeamMember: (b) => request('POST', '/api/team', b),
   updateTeamMember: (id, b) => request('PUT', `/api/team/${id}`, b),
+  orderTeam: (ids) => request('PUT', '/api/team/order', { ids }),
   deleteTeamMember: (id) => request('DELETE', `/api/team/${id}`),
 
   users: () => request('GET', '/api/users'),

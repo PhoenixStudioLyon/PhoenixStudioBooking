@@ -30,8 +30,9 @@ The first launch adds a few fictional "Demo – …" customers and bookings so t
   - Admins manage everything: all clients, every artist's calendar, settings and logins.
   - Artists see the whole calendar but can only create, edit or move their own appointments (they can't delete). Client names are masked ("Damien ***"), and phone, email and socials are never sent to them. Notes and photos stay visible. The Clients, Team Members, Booking Types and Setup pages are hidden from them; they get a "My account" page to change their password.
 - **Customers**: Instagram and Facebook fields on the client profile (admins only).
-- **Team Members**: add, edit or remove artists, each with their own calendar colour. Every appointment is assigned to a team member.
+- **Team Members**: add, edit or remove artists, each with their own calendar colour. Use the ← → buttons on each card to set the order of the artists (calendar columns and lists). Every appointment is assigned to a team member.
 - **Booking Types**: services with default duration and price.
+- **Dark theme**: the moon/sun button in the top bar switches between light and dark (remembered per device).
 - **Setup**: business name, opening hours, open days, currency, extra logins and password change.
 - **Overview**: today's appointments and a few counters.
 - Reports, Reviews, Payments, Promotions and Online Booking appear in the menu as placeholders.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LuUsersRound, LuPencil, LuTrash2, LuCalendarDays, LuMail, LuPhone } from 'react-icons/lu';
+import { LuUsersRound, LuPencil, LuTrash2, LuCalendarDays, LuMail, LuPhone, LuArrowLeft, LuArrowRight } from 'react-icons/lu';
 import Topbar from '../components/Topbar.jsx';
 import Modal, { Confirm } from '../components/Modal.jsx';
 import { toast } from '../components/Toast.jsx';
@@ -52,6 +52,16 @@ export default function TeamMembers() {
     try { await api.deleteTeamMember(removing.id); toast('Team member removed'); setRemoving(null); afterChange(); }
     catch (e) { toast(e.message, 'error'); setRemoving(null); }
   };
+  // Move an artist one place earlier (-1) or later (+1); the order is used in the calendar columns and lists
+  const move = async (index, dir) => {
+    const next = [...list];
+    const j = index + dir;
+    if (j < 0 || j >= next.length) return;
+    [next[index], next[j]] = [next[j], next[index]];
+    setList(next);
+    try { await api.orderTeam(next.map((m) => m.id)); await reloadMeta(); }
+    catch (e) { toast(e.message, 'error'); load(); }
+  };
   const openCalendar = (m) => {
     try { localStorage.setItem('pb:team', JSON.stringify(m.id)); } catch { /* ignore */ }
     navigate('/calendar');
@@ -61,11 +71,11 @@ export default function TeamMembers() {
     <div className="page">
       <Topbar icon={LuUsersRound} title="Team Members" />
       <div className="page-actions">
-        <span className="muted">{list ? `${list.length} team member${list.length > 1 ? 's' : ''}` : ''}</span>
+        <span className="muted">{list ? `${list.length} team member${list.length > 1 ? 's' : ''} · use ← → to change the order in the calendar` : ''}</span>
         <button className="btn btn-primary" onClick={() => setEditing('new')}>Add Team Member</button>
       </div>
       <div className="team-grid">
-        {list?.map((m) => (
+        {list?.map((m, i) => (
           <div className="team-card" key={m.id} style={{ '--c': m.color }}>
             <div className="team-top">
               <span className="team-avatar">{initials(m.name)}</span>
@@ -81,7 +91,11 @@ export default function TeamMembers() {
               {m.phone && <span><LuPhone /> {m.phone}</span>}
               <span className="team-count"><strong>{m.upcoming}</strong> upcoming appointment{m.upcoming === 1 ? '' : 's'}</span>
             </div>
-            <button className="btn btn-block" onClick={() => openCalendar(m)}><LuCalendarDays /> View calendar</button>
+            <div className="team-foot">
+              <button className="icon-btn" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move earlier" title="Move earlier"><LuArrowLeft /></button>
+              <button className="btn grow" onClick={() => openCalendar(m)}><LuCalendarDays /> View calendar</button>
+              <button className="icon-btn" onClick={() => move(i, 1)} disabled={i === list.length - 1} aria-label="Move later" title="Move later"><LuArrowRight /></button>
+            </div>
           </div>
         ))}
       </div>

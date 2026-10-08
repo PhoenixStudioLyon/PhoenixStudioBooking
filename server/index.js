@@ -211,10 +211,20 @@ route('DELETE', '/api/users/:id', (_req, _res, p, me) => {
 route('GET', '/api/meta', () => ({
   settings: getSettings(),
   locations: db.prepare('SELECT * FROM locations ORDER BY id').all(),
-  team: db.prepare('SELECT * FROM team_members WHERE active = 1 ORDER BY id').all(),
+  team: db.prepare('SELECT * FROM team_members WHERE active = 1 ORDER BY (sort_order = 0), sort_order, id').all(),
   services: db.prepare('SELECT * FROM services WHERE active = 1 ORDER BY id').all(),
 }));
 route('PUT', '/api/settings', async (req) => saveSettings(await readJson(req)), ADMIN);
+
+// Display order of the artists (Team Members page, calendar columns, lists): ids in the wanted order
+route('PUT', '/api/team/order', async (req) => {
+  const { ids = [] } = await readJson(req);
+  if (!Array.isArray(ids)) bad('ids must be a list');
+  const set = db.prepare('UPDATE team_members SET sort_order = ? WHERE id = ?');
+  db.exec('BEGIN');
+  try { ids.forEach((id, i) => set.run(i + 1, Number(id))); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; }
+  return { ok: true };
+}, ADMIN);
 
 // simple CRUD for locations / team members / services
 const simpleTables = {
@@ -259,7 +269,7 @@ route('GET', '/api/team', () => {
   return db.prepare(`SELECT t.*,
       (SELECT COUNT(*) FROM bookings b WHERE b.team_member_id = t.id AND b.type = 'appointment'
          AND b.status != 'cancelled' AND b.start >= ?) AS upcoming
-    FROM team_members t WHERE t.active = 1 ORDER BY t.id`).all(today);
+    FROM team_members t WHERE t.active = 1 ORDER BY (t.sort_order = 0), t.sort_order, t.id`).all(today);
 }, ADMIN);
 
 // ----- customers

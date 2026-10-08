@@ -124,6 +124,7 @@ addColumn('users', 'team_member_id', 'INTEGER REFERENCES team_members(id) ON DEL
 addColumn('customers', 'instagram', "TEXT DEFAULT ''");
 addColumn('services', 'color', "TEXT NOT NULL DEFAULT ''"); // '' = use the artist's colour
 addColumn('customers', 'facebook', "TEXT DEFAULT ''");
+addColumn('team_members', 'sort_order', 'INTEGER NOT NULL DEFAULT 0'); // 0 = not ordered yet (listed last, by id)
 
 export const DEFAULT_SETTINGS = {
   businessName: 'Phoenix Studio',
