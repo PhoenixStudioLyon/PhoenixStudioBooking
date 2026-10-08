@@ -5,6 +5,7 @@ import { toast } from '../components/Toast.jsx';
 import { api } from '../api.js';
 import { useApp, usePerms } from '../App.jsx';
 import CustomerModal from '../components/CustomerModal.jsx';
+import DateField from '../components/DateField.jsx';
 import { PhotoGrid, imageFiles, shrinkImage } from '../components/Photos.jsx';
 import { datePart, fromMin, longTime, minutesBetween, timePart, toMin, durationLabel, addMinutesDT, prettyShortDate } from '../dates.js';
 
@@ -222,9 +223,9 @@ export default function BookingForm({ initial, onClose, onSaved }) {
           </select>
         </label>
 
-        <label className="field"><span className="lbl">Date</span>
-          <input type="date" className="input" value={f.date} onChange={set('date')} />
-        </label>
+        <div className="field"><span className="lbl">Date</span>
+          <DateField value={f.date} onChange={(date) => setF((x) => ({ ...x, date }))} />
+        </div>
         {!editing ? (
           <div className="field"><span className="lbl">Recurring</span>
             <div className="row-gap">
