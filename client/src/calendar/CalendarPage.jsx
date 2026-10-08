@@ -76,6 +76,11 @@ export default function CalendarPage() {
   useEffect(() => store.set('view', view), [view]);
   useEffect(() => store.set('loc', locationId), [locationId]);
   useEffect(() => store.set('team', teamId), [teamId]);
+  // Week view always shows a single artist: the logged-in artist's own column, otherwise the first artist
+  const weekDefaultId = team.some((t) => t.id === perms.ownTeamMemberId) ? perms.ownTeamMemberId : team[0]?.id;
+  useEffect(() => {
+    if (view === 'week' && !team.some((t) => t.id === teamId) && weekDefaultId) setTeamId(weekDefaultId);
+  }, [view, teamId, team, weekDefaultId]);
 
   // visible range
   const range = useMemo(() => {
@@ -188,7 +193,7 @@ export default function CalendarPage() {
             </select>
           )}
           <select className="pill-select" value={teamId} onChange={(e) => setTeamId(e.target.value ? Number(e.target.value) : '')}>
-            <option value="">All Team Members</option>
+            {view !== 'week' && <option value="">All Team Members</option>}
             {team.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>
